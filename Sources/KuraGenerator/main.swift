@@ -10,23 +10,34 @@ import Foundation
 //   --dotenv  .env
 //   --output  .kura.yml の result_path を使用
 
-func argument(for flag: String, default defaultValue: String? = nil) -> String? {
-    let args = CommandLine.arguments
-    if let idx = args.firstIndex(of: flag), args.index(after: idx) < args.endIndex {
-        return args[args.index(after: idx)]
-    }
-    return defaultValue
-}
+let knownFlags: Set<String> = ["--config", "--dotenv", "--output"]
 
-let dotenvPath = argument(for: "--dotenv", default: ".env")
-let outputPath = argument(for: "--output")
+func argument(for flag: String) throws -> String? {
+    let args = CommandLine.arguments
+    guard let idx = args.firstIndex(of: flag) else { return nil }
+    let valueIdx = args.index(after: idx)
+    guard valueIdx < args.endIndex, !args[valueIdx].hasPrefix("--") else {
+        throw KuraError.invalidArguments("Missing value for \(flag)")
+    }
+    return args[valueIdx]
+}
 
 // MARK: - メイン処理
 
 do {
+    // 0. 引数を検証する（typo したフラグが黙って無視されるのを防ぐ）
+    if let unknown = CommandLine.arguments.dropFirst()
+        .first(where: { $0.hasPrefix("--") && !knownFlags.contains($0) }) {
+        throw KuraError.invalidArguments(
+            "Unknown option '\(unknown)'. Supported: \(knownFlags.sorted().joined(separator: ", "))"
+        )
+    }
+    let dotenvPath = try argument(for: "--dotenv") ?? ".env"
+    let outputPath = try argument(for: "--output")
+
     // 1. 設定ファイルを読み込む
     let config: KuraConfig
-    if let configPath = argument(for: "--config") {
+    if let configPath = try argument(for: "--config") {
         config = try KuraConfig.load(from: configPath)
     } else {
         config = try KuraConfig.loadDefault()

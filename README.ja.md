@@ -1,5 +1,7 @@
 # Kura 🔐
 
+[English README is here](README.md)
+
 **Kura**（蔵）は、`.env` ファイルのシークレットを難読化し、型安全なSwiftコードを生成する、純粋なSwift製CLIツール（`kura-generator`）です。
 
 Rubyは不要で、Xcode Cloud でそのまま連携できるように設計されています。
@@ -70,7 +72,9 @@ let package = Package(
 ```yaml
 import_name: KuraKeys      # 生成する Swift モジュール名
 result_path: .             # KuraKeys/ を置くディレクトリ
-swift_declaration: internal # internal / public
+swift_declaration: public  # public / internal（デフォルト: public）
+                           # 生成物は独立したパッケージのため、アプリから import して使う場合は public が必要。
+                           # internal は生成された .swift をアプリターゲットに直接取り込む場合のみ使用可
 
 global_secrets:
   - API_KEY
@@ -134,20 +138,20 @@ swift run --package-path BuildTools kura-generator
 
 private func _kuraDecrypt(_ encoded: [UInt8], salt: [UInt8]) -> String { ... }
 
-internal enum KuraKeys {
-    internal static var apiKey: String {
+public enum KuraKeys {
+    public static var apiKey: String {
         let encoded: [UInt8] = [0x3F, 0x1A, ...]
         let salt: [UInt8]    = [0xAB, 0xCD, ...]
         return _kuraDecrypt(encoded, salt: salt)
     }
 }
 
-internal enum KuraKeysDebug {
-    internal static var debugEndpoint: String { ... }
+public enum KuraKeysDebug {
+    public static var debugEndpoint: String { ... }
 }
 
-internal enum KuraKeysRelease {
-    internal static var releaseEndpoint: String { ... }
+public enum KuraKeysRelease {
+    public static var releaseEndpoint: String { ... }
 }
 ```
 

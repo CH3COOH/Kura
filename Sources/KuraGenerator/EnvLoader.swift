@@ -54,27 +54,42 @@ struct EnvLoader {
                 line = String(line.dropFirst("export ".count))
             }
 
-            guard let eqRange = line.range(of: "=") else { continue }
-            let key = String(line[..<eqRange.lowerBound])
+            guard let eqIdx = line.firstIndex(of: "=") else { continue }
+            let key = String(line[..<eqIdx])
                 .trimmingCharacters(in: .whitespaces)
-            var value = String(line[eqRange.upperBound...])
-                .trimmingCharacters(in: .whitespaces)
-
-            // クォートを取り除く
-            let isQuoted = (value.hasPrefix("\"") && value.hasSuffix("\"")) ||
-                (value.hasPrefix("'") && value.hasSuffix("'"))
-            if isQuoted {
-                value = String(value.dropFirst().dropLast())
-            } else if let commentIdx = value.firstIndex(of: "#") {
-                // クォートされた値はリテラル扱いとし、インラインコメント除去の対象外にする
-                // （例: KEY="p#ssw0rd" が "p" に切り詰められるのを防ぐ）
-                value = String(value[..<commentIdx])
-                    .trimmingCharacters(in: .whitespaces)
-            }
+            let value = parseValue(String(line[line.index(after: eqIdx)...]))
 
             guard !key.isEmpty else { continue }
             result[key] = value
         }
         return result
+    }
+
+    /// `=` の右辺を値として解析する
+    /// クォート値はリテラル扱い（閉じクォート以降のコメントは無視）、
+    /// クォートなし値は「空白に続く #」以降をインラインコメントとして除去する
+    private func parseValue(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+
+        if let quote = trimmed.first, quote == "\"" || quote == "'" {
+            let body = trimmed.dropFirst()
+            if let closing = body.firstIndex(of: quote) {
+                // 例: KEY="secret" # comment → secret（クォート内はコメント除去の対象外）
+                return String(body[..<closing])
+            }
+            // 閉じクォートがない場合はリテラルとして扱う
+            return trimmed
+        }
+
+        // クォートなし: 値の先頭、または空白直後の # のみコメント開始とみなす
+        // （KEY=p#ssw0rd を "p" に切り詰めない）
+        var searchIdx = trimmed.startIndex
+        while let hashIdx = trimmed[searchIdx...].firstIndex(of: "#") {
+            if hashIdx == trimmed.startIndex || trimmed[trimmed.index(before: hashIdx)].isWhitespace {
+                return String(trimmed[..<hashIdx]).trimmingCharacters(in: .whitespaces)
+            }
+            searchIdx = trimmed.index(after: hashIdx)
+        }
+        return trimmed
     }
 }

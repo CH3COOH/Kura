@@ -125,6 +125,87 @@ struct CodeGeneratorTests {
         #expect(content.contains("enum KuraKeysStgJp {"))
     }
 
+    @Test func escapesSwiftKeywordPropertyNameWithBackticks() throws {
+        let config = KuraConfig(
+            importName: "KuraKeys",
+            resultPath: ".",
+            globalSecrets: ["DEFAULT"],
+            environments: [:],
+            swiftDeclaration: "internal"
+        )
+        let generator = CodeGenerator(config: config, encoder: KuraEncoder())
+        let basePath = try makeTempDir()
+        defer { try? FileManager.default.removeItem(atPath: basePath) }
+
+        try generator.generate(secrets: ["DEFAULT": "value"], at: basePath)
+
+        let keysSwiftPath = (basePath as NSString)
+            .appendingPathComponent("KuraKeys/Sources/KuraKeys/KuraKeys.swift")
+        let content = try String(contentsOfFile: keysSwiftPath, encoding: .utf8)
+
+        #expect(content.contains("static var `default`: String"))
+    }
+
+    @Test func throwsWhenDistinctKeysCollideToSameProperty() throws {
+        let config = KuraConfig(
+            importName: "KuraKeys",
+            resultPath: ".",
+            globalSecrets: ["API_KEY", "API-KEY"],
+            environments: [:],
+            swiftDeclaration: "internal"
+        )
+        let generator = CodeGenerator(config: config, encoder: KuraEncoder())
+        let basePath = try makeTempDir()
+        defer { try? FileManager.default.removeItem(atPath: basePath) }
+
+        do {
+            try generator.generate(secrets: ["API_KEY": "a", "API-KEY": "b"], at: basePath)
+            Issue.record("Expected KuraError.invalidConfig to be thrown")
+        } catch KuraError.invalidConfig {
+            // expected
+        }
+    }
+
+    @Test func throwsWhenKeyYieldsEmptyIdentifier() throws {
+        let config = KuraConfig(
+            importName: "KuraKeys",
+            resultPath: ".",
+            globalSecrets: ["!!!"],
+            environments: [:],
+            swiftDeclaration: "internal"
+        )
+        let generator = CodeGenerator(config: config, encoder: KuraEncoder())
+        let basePath = try makeTempDir()
+        defer { try? FileManager.default.removeItem(atPath: basePath) }
+
+        do {
+            try generator.generate(secrets: ["!!!": "v"], at: basePath)
+            Issue.record("Expected KuraError.invalidConfig to be thrown")
+        } catch KuraError.invalidConfig {
+            // expected
+        }
+    }
+
+    @Test func throwsWhenEnvironmentNamesCollideToSameEnum() throws {
+        let config = KuraConfig(
+            importName: "KuraKeys",
+            resultPath: ".",
+            globalSecrets: [],
+            environments: ["stg-jp": ["A_KEY"], "stg_jp": ["B_KEY"]],
+            swiftDeclaration: "internal"
+        )
+        let generator = CodeGenerator(config: config, encoder: KuraEncoder())
+        let basePath = try makeTempDir()
+        defer { try? FileManager.default.removeItem(atPath: basePath) }
+
+        do {
+            try generator.generate(secrets: ["A_KEY": "a", "B_KEY": "b"], at: basePath)
+            Issue.record("Expected KuraError.invalidConfig to be thrown")
+        } catch KuraError.invalidConfig {
+            // expected
+        }
+    }
+
     @Test func skipsMissingSecretsWithoutCrashing() throws {
         let config = KuraConfig(
             importName: "KuraKeys",

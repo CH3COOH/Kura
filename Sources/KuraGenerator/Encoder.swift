@@ -26,6 +26,9 @@ struct KuraEncoder {
     let saltLength: Int
 
     init(saltLength: Int = 64) {
+        // salt が空だと生成コード側の `salt[idx % salt.count]` が modulo-by-zero でクラッシュし、
+        // エンコード側だけガードするとシークレットが平文のまま埋め込まれてしまう
+        precondition(saltLength > 0, "saltLength must be positive")
         self.saltLength = saltLength
     }
 
@@ -36,6 +39,11 @@ struct KuraEncoder {
         return Encoded(encodedBytes: encoded, salt: salt)
     }
 
+    /// encode の逆変換（生成コードの _kuraDecrypt と同一ロジック）
+    func decode(_ encoded: [UInt8], salt: [UInt8]) -> String {
+        String(bytes: xor(encoded, with: salt), encoding: .utf8) ?? ""
+    }
+
     // MARK: - Private
 
     private func randomSalt() -> [UInt8] {
@@ -43,8 +51,7 @@ struct KuraEncoder {
     }
 
     private func xor(_ bytes: [UInt8], with salt: [UInt8]) -> [UInt8] {
-        guard !salt.isEmpty else { return bytes }
-        return bytes.enumerated().map { idx, byte in
+        bytes.enumerated().map { idx, byte in
             byte ^ salt[idx % salt.count]
         }
     }

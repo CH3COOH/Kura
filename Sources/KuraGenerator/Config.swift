@@ -26,11 +26,13 @@ struct KuraConfig {
     }
 
     /// デフォルトの設定ファイルパスを探索して読み込む
-    static func loadDefault() throws -> KuraConfig {
+    /// - Parameter directory: 探索の基点ディレクトリ（省略時はプロセスのカレントディレクトリ）
+    static func loadDefault(in directory: String = FileManager.default.currentDirectoryPath) throws -> KuraConfig {
         let candidates = [".kura.yml", ".kura.yaml", ".arkana.yml"]
         for candidate in candidates {
-            if FileManager.default.fileExists(atPath: candidate) {
-                return try load(from: candidate)
+            let path = (directory as NSString).appendingPathComponent(candidate)
+            if FileManager.default.fileExists(atPath: path) {
+                return try load(from: path)
             }
         }
         throw KuraError.invalidConfig(
@@ -44,11 +46,26 @@ struct KuraConfig {
         guard let importName = yaml["import_name"] as? String else {
             throw KuraError.invalidConfig("'import_name' is required in .kura.yml")
         }
-        let resultPath = yaml["result_path"] as? String ?? "."
-        let swiftDecl = yaml["swift_declaration"] as? String ?? "internal"
-        let globalKeys = yaml["global_secrets"] as? [String] ?? []
-        let rawEnvs = yaml["environments"] as? [String: Any] ?? [:]
+        guard isValidModuleName(importName) else {
+            throw KuraError.invalidConfig(
+                "'import_name' must be a valid Swift module name (got '\(importName)')"
+            )
+        }
 
+        let resultPath: String = try optionalValue(yaml, key: "result_path") ?? "."
+
+        // 生成物は独立した SwiftPM パッケージなので、internal だとアプリ側から参照できない。
+        // デフォルトは public とし、生成ソースをアプリターゲットへ直接取り込む場合のみ internal を選べるようにする
+        let swiftDecl: String = try optionalValue(yaml, key: "swift_declaration") ?? "public"
+        guard swiftDecl == "internal" || swiftDecl == "public" else {
+            throw KuraError.invalidConfig(
+                "'swift_declaration' must be 'internal' or 'public' (got '\(swiftDecl)')"
+            )
+        }
+
+        let globalKeys: [String] = try optionalValue(yaml, key: "global_secrets") ?? []
+
+        let rawEnvs: [String: Any] = try optionalValue(yaml, key: "environments") ?? [:]
         var environments: [String: [String]] = [:]
         for (envName, value) in rawEnvs {
             guard let keys = value as? [String] else {
@@ -64,5 +81,21 @@ struct KuraConfig {
             environments: environments,
             swiftDeclaration: swiftDecl
         )
+    }
+
+    /// キーが存在すれば期待する型で返し、型が違えばエラーにする
+    /// （型不一致を黙ってデフォルト値に落とすと、シークレット0件のまま成功してしまう）
+    private static func optionalValue<T>(_ yaml: [String: Any], key: String) throws -> T? {
+        guard let raw = yaml[key], !(raw is NSNull) else { return nil }
+        guard let typed = raw as? T else {
+            throw KuraError.invalidConfig("'\(key)' has an unexpected type in .kura.yml")
+        }
+        return typed
+    }
+
+    /// Swiftモジュール名として妥当か（英字/アンダースコア始まり、英数字/アンダースコアのみ）
+    private static func isValidModuleName(_ name: String) -> Bool {
+        guard let first = name.first, first.isLetter || first == "_" else { return false }
+        return name.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" }
     }
 }

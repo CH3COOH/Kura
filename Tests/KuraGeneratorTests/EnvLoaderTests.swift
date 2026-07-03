@@ -66,13 +66,14 @@ struct EnvLoaderTests {
     }
 
     @Test func processEnvironmentTakesPriorityOverFile() throws {
-        let path = try writeDotenv("SHARED_KEY=from_file\n")
+        let key = "KURA_TEST_\(UUID().uuidString.replacingOccurrences(of: "-", with: "_"))"
+        let path = try writeDotenv("\(key)=from_file\n")
         defer { try? FileManager.default.removeItem(atPath: path) }
-        setenv("SHARED_KEY", "from_env", 1)
-        defer { unsetenv("SHARED_KEY") }
+        setenv(key, "from_env", 1)
+        defer { unsetenv(key) }
 
-        let result = try EnvLoader(dotenvPath: path).resolve(keys: ["SHARED_KEY"])
-        #expect(result["SHARED_KEY"] == "from_env")
+        let result = try EnvLoader(dotenvPath: path).resolve(keys: [key])
+        #expect(result[key] == "from_env")
     }
 
     @Test func doesNotTruncateQuotedValueContainingHash() throws {
@@ -81,6 +82,28 @@ struct EnvLoaderTests {
 
         let result = try EnvLoader(dotenvPath: path).resolve(keys: ["PASSWORD"])
         #expect(result["PASSWORD"] == "p#ssw0rd")
+    }
+
+    @Test func stripsQuotesAndInlineCommentTogether() throws {
+        let path = try writeDotenv("API_KEY=\"secret\" # prod key\n")
+        defer { try? FileManager.default.removeItem(atPath: path) }
+
+        let result = try EnvLoader(dotenvPath: path).resolve(keys: ["API_KEY"])
+        #expect(result["API_KEY"] == "secret")
+    }
+
+    @Test func doesNotTruncateUnquotedValueAtHashWithoutWhitespace() throws {
+        let path = try writeDotenv(
+            """
+            PASSWORD=p#ssw0rd
+            ENDPOINT=https://example.com/page#section
+            """
+        )
+        defer { try? FileManager.default.removeItem(atPath: path) }
+
+        let result = try EnvLoader(dotenvPath: path).resolve(keys: ["PASSWORD", "ENDPOINT"])
+        #expect(result["PASSWORD"] == "p#ssw0rd")
+        #expect(result["ENDPOINT"] == "https://example.com/page#section")
     }
 
     @Test func throwsWhenKeyIsMissing() throws {

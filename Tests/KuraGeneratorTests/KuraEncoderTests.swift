@@ -4,20 +4,12 @@ import Foundation
 
 struct KuraEncoderTests {
 
-    /// エンコード実装内部の xor と同じロジックで復号する（プライベートAPIのため呼び出し側で再実装）
-    private func xorDecrypt(_ encoded: [UInt8], salt: [UInt8]) -> String {
-        let bytes = encoded.enumerated().map { idx, byte -> UInt8 in
-            byte ^ salt[idx % salt.count]
-        }
-        return String(bytes: bytes, encoding: .utf8) ?? ""
-    }
-
     @Test func encodeDecodeRoundTrip() {
         let encoder = KuraEncoder()
         let secret = "super-secret-value-123"
 
         let encoded = encoder.encode(secret)
-        let decoded = xorDecrypt(encoded.encodedBytes, salt: encoded.salt)
+        let decoded = encoder.decode(encoded.encodedBytes, salt: encoded.salt)
 
         #expect(decoded == secret)
     }
