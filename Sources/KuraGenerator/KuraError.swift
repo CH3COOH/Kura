@@ -4,6 +4,7 @@ enum KuraError: LocalizedError {
     case invalidConfig(String)
     case invalidArguments(String)
     case missingSecret(String)
+    case readError(String)
 
     var errorDescription: String? {
         switch self {
@@ -13,6 +14,8 @@ enum KuraError: LocalizedError {
             return "❌  Argument error: \(msg)"
         case let .missingSecret(key):
             return "❌  Secret '\(key)' not found in environment variables or .env file"
+        case let .readError(msg):
+            return "❌  Read error: \(msg)"
         }
     }
 }

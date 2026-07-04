@@ -50,6 +50,37 @@ struct ConfigTests {
         #expect(config.swiftDeclaration == "public")
         #expect(config.globalSecrets == [])
         #expect(config.environments == [:])
+        #expect(config.preserveKeyCase == false)
+    }
+
+    @Test func parsesPreserveKeyCase() throws {
+        let path = try writeYaml(
+            """
+            import_name: KuraKeys
+            preserve_key_case: true
+            """
+        )
+        defer { try? FileManager.default.removeItem(atPath: path) }
+
+        let config = try KuraConfig.load(from: path)
+        #expect(config.preserveKeyCase == true)
+    }
+
+    @Test func throwsWhenPreserveKeyCaseIsNotABool() throws {
+        let path = try writeYaml(
+            """
+            import_name: KuraKeys
+            preserve_key_case: yes_please
+            """
+        )
+        defer { try? FileManager.default.removeItem(atPath: path) }
+
+        do {
+            _ = try KuraConfig.load(from: path)
+            Issue.record("Expected KuraError.invalidConfig to be thrown")
+        } catch KuraError.invalidConfig {
+            // expected
+        }
     }
 
     @Test func throwsWhenImportNameIsMissing() throws {
@@ -113,7 +144,9 @@ struct ConfigTests {
         }
     }
 
-    @Test func throwsWhenEnvironmentsIsNotAMapping() throws {
+    @Test func treatsNonMappingEnvironmentsAsEmpty() throws {
+        // .arkana.yml では environments が文字列配列になっている場合があるため、
+        // 辞書でない場合はエラーにせず空として扱う（後方互換）
         let path = try writeYaml(
             """
             import_name: KuraKeys
@@ -124,12 +157,8 @@ struct ConfigTests {
         )
         defer { try? FileManager.default.removeItem(atPath: path) }
 
-        do {
-            _ = try KuraConfig.load(from: path)
-            Issue.record("Expected KuraError.invalidConfig to be thrown")
-        } catch KuraError.invalidConfig {
-            // expected
-        }
+        let config = try KuraConfig.load(from: path)
+        #expect(config.environments == [:])
     }
 
     @Test func throwsWhenSwiftDeclarationIsInvalid() throws {
@@ -157,6 +186,37 @@ struct ConfigTests {
             _ = try KuraConfig.load(from: path)
             Issue.record("Expected KuraError.invalidConfig to be thrown")
         } catch KuraError.invalidConfig {
+            // expected
+        }
+    }
+
+    @Test func treatsNullEnvironmentValueAsEmptyList() throws {
+        // `debug:` のように値を省略した環境は空リストとして扱う
+        let path = try writeYaml(
+            """
+            import_name: KuraKeys
+            environments:
+              debug:
+              release:
+                - RELEASE_ENDPOINT
+            """
+        )
+        defer { try? FileManager.default.removeItem(atPath: path) }
+
+        let config = try KuraConfig.load(from: path)
+        #expect(config.environments["debug"] == [])
+        #expect(config.environments["release"] == ["RELEASE_ENDPOINT"])
+    }
+
+    @Test func throwsReadErrorWhenConfigFileDoesNotExist() throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString + ".yml")
+            .path
+
+        do {
+            _ = try KuraConfig.load(from: path)
+            Issue.record("Expected KuraError.readError to be thrown")
+        } catch KuraError.readError {
             // expected
         }
     }
