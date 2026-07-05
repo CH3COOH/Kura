@@ -58,6 +58,53 @@ struct CodeGeneratorTests {
         #expect(content.contains("static var analyticsToken: String"))
     }
 
+    @Test func lowercasesSeparatorlessKeyByDefault() throws {
+        let config = KuraConfig(
+            importName: "KuraKeys",
+            resultPath: ".",
+            globalSecrets: ["APIKEY"],
+            environments: [:],
+            swiftDeclaration: "internal"
+        )
+        let generator = CodeGenerator(config: config, encoder: KuraEncoder())
+        let basePath = try makeTempDir()
+        defer { try? FileManager.default.removeItem(atPath: basePath) }
+
+        try generator.generate(secrets: ["APIKEY": "secret"], at: basePath)
+
+        let keysSwiftPath = (basePath as NSString)
+            .appendingPathComponent("KuraKeys/Sources/KuraKeys/KuraKeys.swift")
+        let content = try String(contentsOfFile: keysSwiftPath, encoding: .utf8)
+
+        #expect(content.contains("static var apikey: String"))
+    }
+
+    @Test func preservesKeyCaseWhenOptionIsEnabled() throws {
+        let config = KuraConfig(
+            importName: "KuraKeys",
+            resultPath: ".",
+            globalSecrets: ["APIKEY", "API_KEY"],
+            environments: [:],
+            swiftDeclaration: "internal",
+            preserveKeyCase: true
+        )
+        let generator = CodeGenerator(config: config, encoder: KuraEncoder())
+        let basePath = try makeTempDir()
+        defer { try? FileManager.default.removeItem(atPath: basePath) }
+
+        try generator.generate(
+            secrets: ["APIKEY": "a", "API_KEY": "b"],
+            at: basePath
+        )
+
+        let keysSwiftPath = (basePath as NSString)
+            .appendingPathComponent("KuraKeys/Sources/KuraKeys/KuraKeys.swift")
+        let content = try String(contentsOfFile: keysSwiftPath, encoding: .utf8)
+
+        #expect(content.contains("static var APIKEY: String"))
+        #expect(content.contains("static var API_KEY: String"))
+    }
+
     @Test func generatesCapitalizedEnumPerEnvironment() throws {
         let config = KuraConfig(
             importName: "KuraKeys",
@@ -79,8 +126,8 @@ struct CodeGeneratorTests {
             .appendingPathComponent("KuraKeys/Sources/KuraKeys/KuraKeys.swift")
         let content = try String(contentsOfFile: keysSwiftPath, encoding: .utf8)
 
-        #expect(content.contains("enum KuraKeysDebug {"))
-        #expect(content.contains("enum KuraKeysRelease {"))
+        #expect(content.contains("enum Debug {"))
+        #expect(content.contains("enum Release {"))
     }
 
     @Test func prefixesUnderscoreForDigitLeadingKey() throws {
@@ -122,7 +169,7 @@ struct CodeGeneratorTests {
             .appendingPathComponent("KuraKeys/Sources/KuraKeys/KuraKeys.swift")
         let content = try String(contentsOfFile: keysSwiftPath, encoding: .utf8)
 
-        #expect(content.contains("enum KuraKeysStgJp {"))
+        #expect(content.contains("enum StgJp {"))
     }
 
     @Test func escapesSwiftKeywordPropertyNameWithBackticks() throws {
@@ -203,6 +250,51 @@ struct CodeGeneratorTests {
             Issue.record("Expected KuraError.invalidConfig to be thrown")
         } catch KuraError.invalidConfig {
             // expected
+        }
+    }
+
+    @Test func escapesSelfEnvironmentNameWithBackticks() throws {
+        let config = KuraConfig(
+            importName: "KuraKeys",
+            resultPath: ".",
+            globalSecrets: [],
+            environments: ["self": ["ENDPOINT"]],
+            swiftDeclaration: "internal"
+        )
+        let generator = CodeGenerator(config: config, encoder: KuraEncoder())
+        let basePath = try makeTempDir()
+        defer { try? FileManager.default.removeItem(atPath: basePath) }
+
+        try generator.generate(secrets: ["ENDPOINT": "v"], at: basePath)
+
+        let keysSwiftPath = (basePath as NSString)
+            .appendingPathComponent("KuraKeys/Sources/KuraKeys/KuraKeys.swift")
+        let content = try String(contentsOfFile: keysSwiftPath, encoding: .utf8)
+
+        #expect(content.contains("enum `Self` {"))
+    }
+
+    @Test func throwsWhenEnvironmentNameGeneratesUnreferenceableEnum() throws {
+        // `KuraKeys.Type` はメタタイプ参照と衝突して呼び出せないため、
+        // Type / Protocol になる環境名は設定エラーとして拒否する
+        for envName in ["type", "protocol"] {
+            let config = KuraConfig(
+                importName: "KuraKeys",
+                resultPath: ".",
+                globalSecrets: [],
+                environments: [envName: ["ENDPOINT"]],
+                swiftDeclaration: "internal"
+            )
+            let generator = CodeGenerator(config: config, encoder: KuraEncoder())
+            let basePath = try makeTempDir()
+            defer { try? FileManager.default.removeItem(atPath: basePath) }
+
+            do {
+                try generator.generate(secrets: ["ENDPOINT": "v"], at: basePath)
+                Issue.record("Expected KuraError.invalidConfig for environment '\(envName)'")
+            } catch KuraError.invalidConfig {
+                // expected
+            }
         }
     }
 

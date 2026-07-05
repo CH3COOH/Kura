@@ -13,12 +13,37 @@ struct KuraConfig {
     let environments: [String: [String]]
     /// Swiftのアクセス修飾子（"internal" / "public"）
     let swiftDeclaration: String
+    /// true の場合、キー名をcamelCaseに変換せずそのままプロパティ名として使う（preserve_key_case）
+    let preserveKeyCase: Bool
+
+    init(
+        importName: String,
+        resultPath: String,
+        globalSecrets: [String],
+        environments: [String: [String]],
+        swiftDeclaration: String,
+        preserveKeyCase: Bool = false
+    ) {
+        self.importName = importName
+        self.resultPath = resultPath
+        self.globalSecrets = globalSecrets
+        self.environments = environments
+        self.swiftDeclaration = swiftDeclaration
+        self.preserveKeyCase = preserveKeyCase
+    }
 
     /// 設定ファイルを読み込んでパースする
     /// .kura.yml → .arkana.yml の順で探索する（後方互換）
     static func load(from path: String) throws -> KuraConfig {
-        let url = URL(fileURLWithPath: path)
-        let content = try String(contentsOf: url, encoding: .utf8)
+        guard FileManager.default.fileExists(atPath: path) else {
+            throw KuraError.readError("Config file not found at '\(path)'")
+        }
+        let content: String
+        do {
+            content = try String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)
+        } catch {
+            throw KuraError.readError("Failed to read '\(path)': \(error.localizedDescription)")
+        }
         guard let yaml = try Yams.load(yaml: content) as? [String: Any] else {
             throw KuraError.invalidConfig("Failed to parse \(path) as YAML dictionary")
         }
@@ -65,9 +90,23 @@ struct KuraConfig {
 
         let globalKeys: [String] = try optionalValue(yaml, key: "global_secrets") ?? []
 
-        let rawEnvs: [String: Any] = try optionalValue(yaml, key: "environments") ?? [:]
+        let preserveKeyCase: Bool = try optionalValue(yaml, key: "preserve_key_case") ?? false
+
+        // .arkana.yml では environments が文字列配列（環境名のリスト）になっている場合があるため、
+        // 辞書でない場合は空として扱う
+        let rawEnvs: [String: Any]
+        if let raw = yaml["environments"], !(raw is NSNull), let dict = raw as? [String: Any] {
+            rawEnvs = dict
+        } else {
+            rawEnvs = [:]
+        }
         var environments: [String: [String]] = [:]
         for (envName, value) in rawEnvs {
+            // `debug:` のように値を省略した環境は NSNull になるため、空リストとして扱う
+            if value is NSNull {
+                environments[envName] = []
+                continue
+            }
             guard let keys = value as? [String] else {
                 throw KuraError.invalidConfig("'environments.\(envName)' must be a list of strings")
             }
@@ -79,7 +118,8 @@ struct KuraConfig {
             resultPath: resultPath,
             globalSecrets: globalKeys,
             environments: environments,
-            swiftDeclaration: swiftDecl
+            swiftDeclaration: swiftDecl,
+            preserveKeyCase: preserveKeyCase
         )
     }
 

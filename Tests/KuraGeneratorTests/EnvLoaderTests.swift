@@ -106,6 +106,31 @@ struct EnvLoaderTests {
         #expect(result["ENDPOINT"] == "https://example.com/page#section")
     }
 
+    @Test func skipsMissingFileWhenNotRequired() throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString + ".env")
+            .path
+        let key = "KURA_TEST_\(UUID().uuidString.replacingOccurrences(of: "-", with: "_"))"
+        setenv(key, "from_env", 1)
+        defer { unsetenv(key) }
+
+        let result = try EnvLoader(dotenvPath: path).resolve(keys: [key])
+        #expect(result[key] == "from_env")
+    }
+
+    @Test func throwsWhenRequiredDotenvFileDoesNotExist() throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString + ".env")
+            .path
+
+        do {
+            _ = try EnvLoader(dotenvPath: path, requireDotenvFile: true).resolve(keys: [])
+            Issue.record("Expected KuraError.readError to be thrown")
+        } catch KuraError.readError {
+            // expected
+        }
+    }
+
     @Test func throwsWhenKeyIsMissing() throws {
         let path = try writeDotenv("OTHER_KEY=value\n")
         defer { try? FileManager.default.removeItem(atPath: path) }

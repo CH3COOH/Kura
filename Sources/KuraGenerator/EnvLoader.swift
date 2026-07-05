@@ -4,6 +4,10 @@ import Foundation
 struct EnvLoader {
     /// dotenv ファイルのパス（nil の場合はファイル読み込みをスキップ）
     let dotenvPath: String?
+    /// true の場合、dotenvPath のファイルが存在しないときエラーにする
+    /// （--dotenv でユーザーが明示指定したパスのタイポを黙って無視しないため。
+    ///   デフォルトの .env は存在しなくてもよいので false）
+    var requireDotenvFile: Bool = false
 
     /// キーの一覧に対して値を解決する
     /// 優先順位: 環境変数（CI）> .env ファイル
@@ -28,9 +32,27 @@ struct EnvLoader {
     // MARK: - Private
 
     private func loadFile() throws -> [String: String] {
-        guard let path = dotenvPath,
-              FileManager.default.fileExists(atPath: path) else { return [:] }
-        let content = try String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8)
+        guard let path = dotenvPath else { return [:] }
+        guard FileManager.default.fileExists(atPath: path) else {
+            if requireDotenvFile {
+                throw KuraError.readError("dotenv file not found at '\(path)'")
+            }
+            return [:]
+        }
+        // FileHandle を使って読み取る（named pipe にも対応するため String(contentsOf:) は使わない）
+        guard let handle = FileHandle(forReadingAtPath: path) else {
+            throw KuraError.readError("Failed to open \(path)")
+        }
+        defer { try? handle.close() }
+        let data: Data
+        do {
+            data = try handle.readToEnd() ?? Data()
+        } catch {
+            throw KuraError.readError("Failed to read \(path): \(error.localizedDescription)")
+        }
+        guard let content = String(data: data, encoding: .utf8) else {
+            throw KuraError.readError("Failed to decode \(path) as UTF-8")
+        }
         return parse(content)
     }
 
