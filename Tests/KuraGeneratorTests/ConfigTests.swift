@@ -83,16 +83,12 @@ struct ConfigTests {
         }
     }
 
-    @Test func throwsWhenImportNameIsMissing() throws {
+    @Test func defaultsImportNameToKuraKeysWhenMissing() throws {
         let path = try writeYaml("result_path: .\n")
         defer { try? FileManager.default.removeItem(atPath: path) }
 
-        do {
-            _ = try KuraConfig.load(from: path)
-            Issue.record("Expected KuraError.invalidConfig to be thrown")
-        } catch KuraError.invalidConfig {
-            // expected
-        }
+        let config = try KuraConfig.load(from: path)
+        #expect(config.importName == "KuraKeys")
     }
 
     @Test func throwsWhenEnvironmentValueIsNotAList() throws {

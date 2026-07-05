@@ -3,7 +3,7 @@ import Yams
 
 /// .kura.yml の内容を表す型
 struct KuraConfig {
-    /// 生成するSwiftモジュール名（import_name）
+    /// 生成するSwiftモジュール名（import_name、省略時は "KuraKeys"）
     let importName: String
     /// 出力先ディレクトリ（result_path）
     let resultPath: String
@@ -68,9 +68,7 @@ struct KuraConfig {
     // MARK: - Private
 
     private static func parse(_ yaml: [String: Any]) throws -> KuraConfig {
-        guard let importName = yaml["import_name"] as? String else {
-            throw KuraError.invalidConfig("'import_name' is required in .kura.yml")
-        }
+        let importName: String = try optionalValue(yaml, key: "import_name") ?? "KuraKeys"
         guard isValidModuleName(importName) else {
             throw KuraError.invalidConfig(
                 "'import_name' must be a valid Swift module name (got '\(importName)')"
