@@ -2,7 +2,7 @@ import Foundation
 
 /// コマンドライン引数を解釈して生成処理を実行する
 struct KuraCLI {
-    static let version = "1.0.1"
+    static let version = "1.0.3"
 
     static let usage = """
     USAGE: kura-generator [--config <path>] [--dotenv <path>] [--output <path>]
