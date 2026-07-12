@@ -72,8 +72,26 @@ struct CLITests {
         }
     }
 
-    @Test func lastValueWinsWhenFlagIsRepeated() throws {
-        let options = try KuraCLI.parseOptions(["--config", "a.yml", "--config", "b.yml"])
-        #expect(options.configPath == "b.yml")
+    @Test func throwsWhenFlagIsRepeated() throws {
+        // 重複指定を黙って上書きすると、先に指定した値が効いていると
+        // 思い込んだまま気付けないためエラーにする
+        do {
+            _ = try KuraCLI.parseOptions(["--config", "a.yml", "--config", "b.yml"])
+            Issue.record("Expected KuraError.invalidArguments to be thrown")
+        } catch KuraError.invalidArguments {
+            // expected
+        }
+    }
+
+    @Test func allowsEachValueFlagOnce() throws {
+        // 異なるフラグの組み合わせは重複扱いにしない
+        let options = try KuraCLI.parseOptions([
+            "--config", "a.yml",
+            "--dotenv", "a.env",
+            "--output", "Out",
+        ])
+        #expect(options.configPath == "a.yml")
+        #expect(options.dotenvPath == "a.env")
+        #expect(options.outputPath == "Out")
     }
 }

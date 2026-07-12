@@ -92,11 +92,17 @@ struct KuraCLI {
                 guard valueIdx < args.endIndex, !args[valueIdx].hasPrefix("--") else {
                     throw KuraError.invalidArguments("Missing value for \(arg)")
                 }
+                let keyPath: WritableKeyPath<Options, String?>
                 switch arg {
-                case "--config": options.configPath = args[valueIdx]
-                case "--dotenv": options.dotenvPath = args[valueIdx]
-                default: options.outputPath = args[valueIdx]
+                case "--config": keyPath = \.configPath
+                case "--dotenv": keyPath = \.dotenvPath
+                default: keyPath = \.outputPath
                 }
+                // 重複指定は黙って上書きせずエラーにする（意図しない指定の見落としを防ぐ）
+                guard options[keyPath: keyPath] == nil else {
+                    throw KuraError.invalidArguments("Duplicate argument '\(arg)'")
+                }
+                options[keyPath: keyPath] = args[valueIdx]
                 idx = valueIdx
             default:
                 throw KuraError.invalidArguments(
