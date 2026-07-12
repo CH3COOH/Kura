@@ -71,14 +71,22 @@ struct KuraCLI {
     /// 未知のフラグ・値のないフラグはエラーにする（typo が黙って無視されるのを防ぐ）
     static func parseOptions(_ args: [String]) throws -> Options {
         var options = Options()
+
+        // --help / --version は他の引数が不正でも優先する（一般的な CLI の慣例に合わせ、
+        // usage を見たいだけのユーザーが Unknown argument で弾かれないようにする）
+        if args.contains("--help") || args.contains("-h") {
+            options.showHelp = true
+            return options
+        }
+        if args.contains("--version") {
+            options.showVersion = true
+            return options
+        }
+
         var idx = args.startIndex
         while idx < args.endIndex {
             let arg = args[idx]
             switch arg {
-            case "--help", "-h":
-                options.showHelp = true
-            case "--version":
-                options.showVersion = true
             case "--config", "--dotenv", "--output":
                 let valueIdx = args.index(after: idx)
                 guard valueIdx < args.endIndex, !args[valueIdx].hasPrefix("--") else {

@@ -28,6 +28,23 @@ struct CLITests {
         #expect(try KuraCLI.parseOptions(["--version"]).showVersion)
     }
 
+    @Test func helpTakesPrecedenceOverInvalidArguments() throws {
+        // usage を見たいだけのユーザーが Unknown argument で弾かれないようにする
+        #expect(try KuraCLI.parseOptions(["--help", "--bogus"]).showHelp)
+        #expect(try KuraCLI.parseOptions(["--bogus", "-h"]).showHelp)
+        #expect(try KuraCLI.parseOptions(["--config", "--help"]).showHelp)
+    }
+
+    @Test func versionTakesPrecedenceOverInvalidArguments() throws {
+        #expect(try KuraCLI.parseOptions(["--bogus", "--version"]).showVersion)
+    }
+
+    @Test func helpTakesPrecedenceOverVersion() throws {
+        let options = try KuraCLI.parseOptions(["--version", "--help"])
+        #expect(options.showHelp)
+        #expect(!options.showVersion)
+    }
+
     @Test func throwsOnUnknownArgument() throws {
         do {
             _ = try KuraCLI.parseOptions(["--confg", "conf.yml"])
