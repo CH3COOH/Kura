@@ -66,6 +66,26 @@ struct ConfigTests {
         #expect(config.preserveKeyCase == true)
     }
 
+    @Test func typeMismatchErrorMentionsActualConfigPath() throws {
+        // .arkana.yml や --config で指定したファイルでも ".kura.yml" 固定ではなく
+        // 実際のパスをエラーメッセージに含める
+        let path = try writeYaml(
+            """
+            import_name: KuraKeys
+            global_secrets: API_KEY
+            """
+        )
+        defer { try? FileManager.default.removeItem(atPath: path) }
+
+        do {
+            _ = try KuraConfig.load(from: path)
+            Issue.record("Expected KuraError.invalidConfig to be thrown")
+        } catch let KuraError.invalidConfig(message) {
+            #expect(message.contains(path))
+            #expect(!message.contains(".kura.yml"))
+        }
+    }
+
     @Test func throwsWhenPreserveKeyCaseIsNotABool() throws {
         let path = try writeYaml(
             """

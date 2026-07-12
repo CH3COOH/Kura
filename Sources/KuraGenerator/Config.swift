@@ -47,7 +47,7 @@ struct KuraConfig {
         guard let yaml = try Yams.load(yaml: content) as? [String: Any] else {
             throw KuraError.invalidConfig("Failed to parse \(path) as YAML dictionary")
         }
-        return try parse(yaml)
+        return try parse(yaml, path: path)
     }
 
     /// デフォルトの設定ファイルパスを探索して読み込む
@@ -67,28 +67,28 @@ struct KuraConfig {
 
     // MARK: - Private
 
-    private static func parse(_ yaml: [String: Any]) throws -> KuraConfig {
-        let importName: String = try optionalValue(yaml, key: "import_name") ?? "KuraKeys"
+    private static func parse(_ yaml: [String: Any], path: String) throws -> KuraConfig {
+        let importName: String = try optionalValue(yaml, key: "import_name", path: path) ?? "KuraKeys"
         guard isValidModuleName(importName) else {
             throw KuraError.invalidConfig(
                 "'import_name' must be a valid Swift module name (got '\(importName)')"
             )
         }
 
-        let resultPath: String = try optionalValue(yaml, key: "result_path") ?? "."
+        let resultPath: String = try optionalValue(yaml, key: "result_path", path: path) ?? "."
 
         // 生成物は独立した SwiftPM パッケージなので、internal だとアプリ側から参照できない。
         // デフォルトは public とし、生成ソースをアプリターゲットへ直接取り込む場合のみ internal を選べるようにする
-        let swiftDecl: String = try optionalValue(yaml, key: "swift_declaration") ?? "public"
+        let swiftDecl: String = try optionalValue(yaml, key: "swift_declaration", path: path) ?? "public"
         guard swiftDecl == "internal" || swiftDecl == "public" else {
             throw KuraError.invalidConfig(
                 "'swift_declaration' must be 'internal' or 'public' (got '\(swiftDecl)')"
             )
         }
 
-        let globalKeys: [String] = try optionalValue(yaml, key: "global_secrets") ?? []
+        let globalKeys: [String] = try optionalValue(yaml, key: "global_secrets", path: path) ?? []
 
-        let preserveKeyCase: Bool = try optionalValue(yaml, key: "preserve_key_case") ?? false
+        let preserveKeyCase: Bool = try optionalValue(yaml, key: "preserve_key_case", path: path) ?? false
 
         // .arkana.yml では environments が文字列配列（環境名のリスト）になっている場合があるため、
         // 辞書でない場合は空として扱う
@@ -123,10 +123,10 @@ struct KuraConfig {
 
     /// キーが存在すれば期待する型で返し、型が違えばエラーにする
     /// （型不一致を黙ってデフォルト値に落とすと、シークレット0件のまま成功してしまう）
-    private static func optionalValue<T>(_ yaml: [String: Any], key: String) throws -> T? {
+    private static func optionalValue<T>(_ yaml: [String: Any], key: String, path: String) throws -> T? {
         guard let raw = yaml[key], !(raw is NSNull) else { return nil }
         guard let typed = raw as? T else {
-            throw KuraError.invalidConfig("'\(key)' has an unexpected type in .kura.yml")
+            throw KuraError.invalidConfig("'\(key)' has an unexpected type in \(path)")
         }
         return typed
     }
